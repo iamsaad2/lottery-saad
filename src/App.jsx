@@ -1026,7 +1026,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-lg font-extrabold text-slate-800 leading-tight tracking-tight">
-                NEOMED M3 Lottery Tool
+                NEOMED Lottery Tool by saad :)
               </h1>
               <p className="text-[10px] text-slate-400 font-medium">
                 {allSchedules.length} schedules · {CITIES.length} cities
