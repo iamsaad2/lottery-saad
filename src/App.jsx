@@ -171,7 +171,7 @@ function CompactRow({
         <input
           type="checkbox"
           checked={selected}
-          onChange={() => onSelect(index)}
+          onChange={(e) => onSelect(index, e.nativeEvent.shiftKey)}
           className="w-3.5 h-3.5 accent-blue-500 flex-shrink-0 cursor-pointer"
           onClick={(e) => e.stopPropagation()}
         />
@@ -299,7 +299,7 @@ function ScheduleCard({
             <input
               type="checkbox"
               checked={selected}
-              onChange={() => onSelect(index)}
+              onChange={(e) => onSelect(index, e.nativeEvent.shiftKey)}
               className="w-3.5 h-3.5 accent-blue-500 cursor-pointer"
             />
 
@@ -807,12 +807,28 @@ export default function App() {
   };
 
   // Selection
-  const toggleSelect = (index) => {
-    setSelectedIndices((prev) => {
-      const next = new Set(prev);
-      if (next.has(index)) next.delete(index); else next.add(index);
-      return next;
-    });
+  const lastSelectedRef = useRef(null);
+
+  const toggleSelect = (index, shiftKey) => {
+    if (shiftKey && lastSelectedRef.current !== null) {
+      // Shift+click: select range from last clicked to current
+      const from = Math.min(lastSelectedRef.current, index);
+      const to = Math.max(lastSelectedRef.current, index);
+      setSelectedIndices((prev) => {
+        const next = new Set(prev);
+        for (let i = from; i <= to; i++) {
+          next.add(i);
+        }
+        return next;
+      });
+    } else {
+      setSelectedIndices((prev) => {
+        const next = new Set(prev);
+        if (next.has(index)) next.delete(index); else next.add(index);
+        return next;
+      });
+    }
+    lastSelectedRef.current = index;
   };
 
   const selectAll = () => {
@@ -1763,7 +1779,7 @@ export default function App() {
         )}
 
         {/* ═══ SMART RANKER VIEW ═══ */}
-        {view === "smart" && (
+        <div style={{ display: view === "smart" ? "block" : "none" }}>
           <SmartRanker
             schedules={allSchedules}
             onApplyRankList={(newList) => {
@@ -1773,7 +1789,7 @@ export default function App() {
             }}
             onBack={() => setView("search")}
           />
-        )}
+        </div>
       </main>
     </div>
   );
