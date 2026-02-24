@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 
 const NUM_BLOCKS = 9;
 
@@ -39,6 +39,24 @@ const ROTATIONS_WITH_SITES = [
   "Internal Medicine", "Emergency Medicine", "Pediatrics",
 ];
 
+// ─── Priority categories ─────────────────────────────────────────────────────
+// Each category has a key, label, and description.
+// The order of this array is the default priority (index 0 = highest).
+const PRIORITY_CATEGORIES = [
+  { key: "city", label: "City / Location", desc: "Which city your schedule is based in" },
+  { key: "timing", label: "Rotation Timing", desc: "When each rotation falls in the year" },
+  { key: "ordering", label: "Rotation Ordering", desc: "OB/GYN before Surgery, Surgery before EM" },
+  { key: "pinned", label: "Must-Have Placements", desc: "Specific rotation in a specific block" },
+  { key: "avoid", label: "Avoidances", desc: "Rotations you don't want in certain blocks" },
+  { key: "sites", label: "Hospital / Site Preferences", desc: "Preferred or avoided sites per rotation" },
+];
+
+// Weight multipliers based on priority position (index 0 = rank 1 = highest)
+// 6 categories: rank 1 gets 6x, rank 2 gets 5x, ... rank 6 gets 1x
+function getWeightMultiplier(priorityIndex, totalCategories) {
+  return totalCategories - priorityIndex;
+}
+
 function getRotationSites(schedules) {
   const rotSites = {};
   for (const r of schedules) {
@@ -57,11 +75,110 @@ function getRotationSites(schedules) {
   return result;
 }
 
-// ─── Scoring Engine ──────────────────────────────────────────────────────────
-function scoreSchedule(schedule, prefs) {
-  let score = 0;
-  let maxScore = 0;
+// ─── Scoring helpers per category ─────────────────────────────────────────────
+// Each returns { score, max } where score/max is 0-1 ratio for that category.
+// A category with no active prefs returns { score: 0, max: 0 } (skipped).
 
+function scoreCityCategory(blocks, schedule, prefs) {
+  if (prefs.preferredCities.length === 0) return { score: 0, max: 0 };
+  const city = (schedule["Dominant City"] || "").trim();
+  return { score: prefs.preferredCities.includes(city) ? 1 : 0, max: 1 };
+}
+
+function scoreTimingCategory(blocks, prefs) {
+  let score = 0, max = 0;
+  for (const rot of SPECIALTIES) {
+    const pref = prefs.rotationTiming[rot];
+    if (!pref || pref === "any") continue;
+    max += 1;
+    const rotBlocks = blocks.filter((b) => b.rotation === rot).map((b) => b.num);
+    if (rotBlocks.length === 0) continue;
+    const relevantBlock = pref === "early" ? Math.min(...rotBlocks) : pref === "late" ? Math.max(...rotBlocks) : rotBlocks[0];
+    const early = [1, 2, 3], middle = [4, 5, 6], late = [7, 8, 9];
+    if (pref === "early") { if (early.includes(relevantBlock)) score += 1; else if (middle.includes(relevantBlock)) score += 0.4; }
+    else if (pref === "middle") { if (middle.includes(relevantBlock)) score += 1; else score += 0.4; }
+    else if (pref === "late") { if (late.includes(relevantBlock)) score += 1; else if (middle.includes(relevantBlock)) score += 0.4; }
+  }
+  return { score, max };
+}
+
+function scoreOrderingCategory(blocks, prefs) {
+  let score = 0, max = 0;
+  if (prefs.obgynBeforeSurgery !== "any") {
+    max += 1;
+    const obBlocks = blocks.filter((b) => b.rotation === "Obstetrics/Gynecology").map((b) => b.num);
+    const surgBlocks = blocks.filter((b) => b.rotation === "Surgery").map((b) => b.num);
+    if (obBlocks.length > 0 && surgBlocks.length > 0) {
+      const ob = Math.min(...obBlocks), surg = Math.min(...surgBlocks);
+      if (prefs.obgynBeforeSurgery === "yes" && ob < surg) score += 1;
+      else if (prefs.obgynBeforeSurgery === "yes" && Math.abs(ob - surg) <= 1) score += 0.3;
+      else if (prefs.obgynBeforeSurgery === "no" && surg < ob) score += 1;
+      else if (prefs.obgynBeforeSurgery === "no" && Math.abs(surg - ob) <= 1) score += 0.3;
+    }
+  }
+  if (prefs.surgeryBeforeEM !== "any") {
+    max += 1;
+    const surgBlocks = blocks.filter((b) => b.rotation === "Surgery").map((b) => b.num);
+    const emBlocks = blocks.filter((b) => b.rotation === "Emergency Medicine").map((b) => b.num);
+    if (surgBlocks.length > 0 && emBlocks.length > 0) {
+      const surg = Math.min(...surgBlocks), em = Math.min(...emBlocks);
+      if (prefs.surgeryBeforeEM === "yes" && surg < em) score += 1;
+      else if (prefs.surgeryBeforeEM === "yes" && Math.abs(surg - em) <= 1) score += 0.3;
+      else if (prefs.surgeryBeforeEM === "no" && em < surg) score += 1;
+      else if (prefs.surgeryBeforeEM === "no" && Math.abs(em - surg) <= 1) score += 0.3;
+    }
+  }
+  return { score, max };
+}
+
+function scorePinnedCategory(blocks, prefs) {
+  let score = 0, max = 0;
+  for (const pin of prefs.pinnedRotations) {
+    if (!pin.rotation || !pin.block) continue;
+    max += 1;
+    const blockData = blocks[pin.block - 1];
+    if (blockData && blockData.rotation === pin.rotation) score += 1;
+  }
+  return { score, max };
+}
+
+function scoreAvoidCategory(blocks, prefs) {
+  let score = 0, max = 0;
+  for (const avoid of prefs.avoidRotations) {
+    if (!avoid.rotation || !avoid.block) continue;
+    max += 1;
+    const blockData = blocks[avoid.block - 1];
+    if (!blockData || blockData.rotation !== avoid.rotation) score += 1;
+  }
+  return { score, max };
+}
+
+function scoreSitesCategory(blocks, prefs) {
+  let score = 0, max = 0;
+  for (const rsp of prefs.rotationSitePrefs) {
+    if (!rsp.rotation || !rsp.site || rsp.preference === "neutral") continue;
+    max += 1;
+    const hasMatch = blocks.some((b) => b.rotation === rsp.rotation && b.site === rsp.site);
+    if (rsp.preference === "prefer" && hasMatch) score += 1;
+    else if (rsp.preference === "avoid" && !hasMatch) score += 1;
+  }
+  return { score, max };
+}
+
+const CATEGORY_SCORERS = {
+  city: scoreCityCategory,
+  timing: scoreTimingCategory,
+  ordering: scoreOrderingCategory,
+  pinned: scorePinnedCategory,
+  avoid: scoreAvoidCategory,
+  sites: scoreSitesCategory,
+};
+
+// ─── Scoring Engine (tiered) ─────────────────────────────────────────────────
+// Returns { tiers: number[], displayScore: number }
+// tiers[i] = 0-1 ratio for priority level i (used for lexicographic sort)
+// displayScore = weighted composite 0-100 for the badge
+function scoreSchedule(schedule, prefs, priorityOrder) {
   const blocks = [];
   for (let i = 1; i <= NUM_BLOCKS; i++) {
     blocks.push({
@@ -71,82 +188,44 @@ function scoreSchedule(schedule, prefs) {
     });
   }
 
-  // 1. City preference (weight: 30)
-  if (prefs.preferredCities.length > 0) {
-    maxScore += 30;
-    const city = (schedule["Dominant City"] || "").trim();
-    if (prefs.preferredCities.includes(city)) score += 30;
-  }
-
-  // 2. Rotation timing preferences (weight: 8 each)
-  for (const rot of SPECIALTIES) {
-    const pref = prefs.rotationTiming[rot];
-    if (!pref || pref === "any") continue;
-    maxScore += 8;
-    const rotBlocks = blocks.filter((b) => b.rotation === rot).map((b) => b.num);
-    if (rotBlocks.length === 0) continue;
-    const relevantBlock = pref === "early" ? Math.min(...rotBlocks) : pref === "late" ? Math.max(...rotBlocks) : rotBlocks[0];
-    const early = [1, 2, 3], middle = [4, 5, 6], late = [7, 8, 9];
-    if (pref === "early") { if (early.includes(relevantBlock)) score += 8; else if (middle.includes(relevantBlock)) score += 3; }
-    else if (pref === "middle") { if (middle.includes(relevantBlock)) score += 8; else score += 3; }
-    else if (pref === "late") { if (late.includes(relevantBlock)) score += 8; else if (middle.includes(relevantBlock)) score += 3; }
-  }
-
-  // 3. Pinned rotations (weight: 15 each)
-  for (const pin of prefs.pinnedRotations) {
-    if (!pin.rotation || !pin.block) continue;
-    maxScore += 15;
-    const blockData = blocks[pin.block - 1];
-    if (blockData && blockData.rotation === pin.rotation) score += 15;
-  }
-
-  // 4. Avoid rotation in block (weight: 10 each)
-  for (const avoid of prefs.avoidRotations) {
-    if (!avoid.rotation || !avoid.block) continue;
-    maxScore += 10;
-    const blockData = blocks[avoid.block - 1];
-    if (!blockData || blockData.rotation !== avoid.rotation) score += 10;
-  }
-
-  // 5. Rotation-specific site preferences (weight: 6 each)
-  for (const rsp of prefs.rotationSitePrefs) {
-    if (!rsp.rotation || !rsp.site || rsp.preference === "neutral") continue;
-    maxScore += 6;
-    const hasMatch = blocks.some((b) => b.rotation === rsp.rotation && b.site === rsp.site);
-    if (rsp.preference === "prefer" && hasMatch) score += 6;
-    else if (rsp.preference === "avoid" && !hasMatch) score += 6;
-  }
-
-  // 6. OB/GYN before Surgery (weight: 10)
-  if (prefs.obgynBeforeSurgery !== "any") {
-    maxScore += 10;
-    const obBlocks = blocks.filter((b) => b.rotation === "Obstetrics/Gynecology").map((b) => b.num);
-    const surgBlocks = blocks.filter((b) => b.rotation === "Surgery").map((b) => b.num);
-    if (obBlocks.length > 0 && surgBlocks.length > 0) {
-      const ob = Math.min(...obBlocks), surg = Math.min(...surgBlocks);
-      if (prefs.obgynBeforeSurgery === "yes" && ob < surg) score += 10;
-      else if (prefs.obgynBeforeSurgery === "yes" && Math.abs(ob - surg) <= 1) score += 3;
-      else if (prefs.obgynBeforeSurgery === "no" && surg < ob) score += 10;
-      else if (prefs.obgynBeforeSurgery === "no" && Math.abs(surg - ob) <= 1) score += 3;
+  // Compute per-category scores
+  const catScores = {};
+  for (const key of priorityOrder) {
+    const scorer = CATEGORY_SCORERS[key];
+    if (key === "city") {
+      catScores[key] = scorer(blocks, schedule, prefs);
+    } else {
+      catScores[key] = scorer(blocks, prefs);
     }
   }
 
-  // 7. Surgery before EM (weight: 10)
-  if (prefs.surgeryBeforeEM !== "any") {
-    maxScore += 10;
-    const surgBlocks = blocks.filter((b) => b.rotation === "Surgery").map((b) => b.num);
-    const emBlocks = blocks.filter((b) => b.rotation === "Emergency Medicine").map((b) => b.num);
-    if (surgBlocks.length > 0 && emBlocks.length > 0) {
-      const surg = Math.min(...surgBlocks), em = Math.min(...emBlocks);
-      if (prefs.surgeryBeforeEM === "yes" && surg < em) score += 10;
-      else if (prefs.surgeryBeforeEM === "yes" && Math.abs(surg - em) <= 1) score += 3;
-      else if (prefs.surgeryBeforeEM === "no" && em < surg) score += 10;
-      else if (prefs.surgeryBeforeEM === "no" && Math.abs(em - surg) <= 1) score += 3;
-    }
-  }
+  // Build tier array: for each priority position, the ratio (0-1).
+  // Categories with max=0 (no prefs set) get ratio=0.5 (neutral, won't affect sort).
+  const tiers = priorityOrder.map((key) => {
+    const { score, max } = catScores[key];
+    if (max === 0) return 0.5; // neutral — doesn't penalize or reward
+    return score / max;
+  });
 
-  if (maxScore === 0) return 50;
-  return Math.round((score / maxScore) * 100);
+  // Display score: weighted composite for the badge (still useful for visual)
+  let totalScore = 0, totalMax = 0;
+  priorityOrder.forEach((key, idx) => {
+    const { score, max } = catScores[key];
+    const weight = getWeightMultiplier(idx, priorityOrder.length);
+    totalScore += score * weight;
+    totalMax += max * weight;
+  });
+  const displayScore = totalMax === 0 ? 50 : Math.round((totalScore / totalMax) * 100);
+
+  return { tiers, displayScore };
+}
+
+// Lexicographic comparator for tier arrays (descending — higher is better)
+function compareTiers(a, b) {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return b[i] - a[i]; // descending
+  }
+  return 0;
 }
 
 // ─── Helper components ───────────────────────────────────────────────────────
@@ -228,6 +307,86 @@ function OrderingQuestion({ title, subtitle, optionA, optionB, value, onChange }
   );
 }
 
+// ─── Priority Ranker Component ───────────────────────────────────────────────
+function PriorityRanker({ priorityOrder, onReorder }) {
+  const movePriority = (index, direction) => {
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= priorityOrder.length) return;
+    const next = [...priorityOrder];
+    [next[index], next[newIndex]] = [next[newIndex], next[index]];
+    onReorder(next);
+  };
+
+  const catMap = {};
+  PRIORITY_CATEGORIES.forEach((c) => { catMap[c.key] = c; });
+
+  return (
+    <div className="space-y-1.5">
+      {priorityOrder.map((key, idx) => {
+        const cat = catMap[key];
+        if (!cat) return null;
+        const weight = getWeightMultiplier(idx, priorityOrder.length);
+        return (
+          <div
+            key={key}
+            className="flex items-center gap-3 px-3 py-2.5 bg-white border border-slate-200 rounded-lg hover:border-slate-300 transition-colors"
+          >
+            {/* Rank badge */}
+            <span className={`flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold flex-shrink-0 ${
+              idx === 0 ? "bg-blue-600 text-white" :
+              idx === 1 ? "bg-blue-100 text-blue-700" :
+              "bg-slate-100 text-slate-500"
+            }`}>
+              {idx + 1}
+            </span>
+
+            {/* Label + weight bar */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-700">{cat.label}</span>
+                <span className="text-[10px] text-slate-400">{cat.desc}</span>
+              </div>
+              {/* Weight bar */}
+              <div className="mt-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-300"
+                  style={{
+                    width: `${(weight / priorityOrder.length) * 100}%`,
+                    backgroundColor: idx === 0 ? "#2563eb" : idx === 1 ? "#3b82f6" : idx === 2 ? "#60a5fa" : "#94a3b8",
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Weight label */}
+            <span className="text-[10px] font-bold text-slate-400 w-6 text-right flex-shrink-0">
+              {weight}x
+            </span>
+
+            {/* Move buttons */}
+            <div className="flex flex-col gap-0.5 flex-shrink-0">
+              <button
+                onClick={() => movePriority(idx, -1)}
+                disabled={idx === 0}
+                className="p-0.5 rounded hover:bg-slate-100 disabled:opacity-20 disabled:cursor-not-allowed text-slate-400"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
+              </button>
+              <button
+                onClick={() => movePriority(idx, 1)}
+                disabled={idx === priorityOrder.length - 1}
+                className="p-0.5 rounded hover:bg-slate-100 disabled:opacity-20 disabled:cursor-not-allowed text-slate-400"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 export default function SmartRanker({ schedules, onApplyRankList, onBack }) {
   const [prefs, setPrefs] = useState({
@@ -239,6 +398,10 @@ export default function SmartRanker({ schedules, onApplyRankList, onBack }) {
     obgynBeforeSurgery: "any",
     surgeryBeforeEM: "any",
   });
+
+  const [priorityOrder, setPriorityOrder] = useState(
+    PRIORITY_CATEGORIES.map((c) => c.key)
+  );
 
   const [showResults, setShowResults] = useState(false);
   const [selectedCount, setSelectedCount] = useState(30);
@@ -302,8 +465,13 @@ export default function SmartRanker({ schedules, onApplyRankList, onBack }) {
   };
 
   const scoredSchedules = useMemo(() => {
-    return schedules.map((s) => ({ schedule: s, score: scoreSchedule(s, prefs) })).sort((a, b) => b.score - a.score);
-  }, [schedules, prefs]);
+    return schedules
+      .map((s) => {
+        const { tiers, displayScore } = scoreSchedule(s, prefs, priorityOrder);
+        return { schedule: s, tiers, score: displayScore };
+      })
+      .sort((a, b) => compareTiers(a.tiers, b.tiers));
+  }, [schedules, prefs, priorityOrder]);
 
   const handleApply = () => {
     const topN = scoredSchedules.slice(0, selectedCount).map((s) => s.schedule);
@@ -441,7 +609,7 @@ export default function SmartRanker({ schedules, onApplyRankList, onBack }) {
       <OrderingQuestion title="Do you want OB/GYN before Surgery?" optionA="OB/GYN before Surgery" optionB="Surgery before OB/GYN" value={prefs.obgynBeforeSurgery} onChange={(val) => updatePref("obgynBeforeSurgery", val)} />
 
       {/* Q4: Surgery before EM */}
-      <OrderingQuestion title="Do you want Surgery before Emergency Medicine?"  optionA="Surgery before EM" optionB="EM before Surgery" value={prefs.surgeryBeforeEM} onChange={(val) => updatePref("surgeryBeforeEM", val)} />
+      <OrderingQuestion title="Do you want Surgery before Emergency Medicine?" optionA="Surgery before EM" optionB="EM before Surgery" value={prefs.surgeryBeforeEM} onChange={(val) => updatePref("surgeryBeforeEM", val)} />
 
       {/* Q5: Pinned rotations */}
       <SectionCard title="Must-have placements" subtitle='Example: "I want Elective in Block 9" — these are strong preferences'>
@@ -531,6 +699,14 @@ export default function SmartRanker({ schedules, onApplyRankList, onBack }) {
             );
           })}
         </div>
+      </SectionCard>
+
+      {/* ─── Priority Hierarchy ────────────────────────────────────────────── */}
+      <SectionCard
+        title="Priority Ranking"
+        subtitle="Rank what matters most to you — #1 has the highest weight in scoring. Use the arrows to reorder."
+      >
+        <PriorityRanker priorityOrder={priorityOrder} onReorder={setPriorityOrder} />
       </SectionCard>
 
       {/* Generate button */}
