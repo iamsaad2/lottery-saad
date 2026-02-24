@@ -40,8 +40,6 @@ const ROTATIONS_WITH_SITES = [
 ];
 
 // ─── Priority categories ─────────────────────────────────────────────────────
-// Each category has a key, label, and description.
-// The order of this array is the default priority (index 0 = highest).
 const PRIORITY_CATEGORIES = [
   { key: "city", label: "City / Location", desc: "Which city your schedule is based in" },
   { key: "timing", label: "Rotation Timing", desc: "When each rotation falls in the year" },
@@ -51,8 +49,6 @@ const PRIORITY_CATEGORIES = [
   { key: "sites", label: "Hospital / Site Preferences", desc: "Preferred or avoided sites per rotation" },
 ];
 
-// Weight multipliers based on priority position (index 0 = rank 1 = highest)
-// 6 categories: rank 1 gets 6x, rank 2 gets 5x, ... rank 6 gets 1x
 function getWeightMultiplier(priorityIndex, totalCategories) {
   return totalCategories - priorityIndex;
 }
@@ -76,8 +72,6 @@ function getRotationSites(schedules) {
 }
 
 // ─── Scoring helpers per category ─────────────────────────────────────────────
-// Each returns { score, max } where score/max is 0-1 ratio for that category.
-// A category with no active prefs returns { score: 0, max: 0 } (skipped).
 
 function scoreCityCategory(blocks, schedule, prefs) {
   if (prefs.preferredCities.length === 0) return { score: 0, max: 0 };
@@ -175,9 +169,6 @@ const CATEGORY_SCORERS = {
 };
 
 // ─── Scoring Engine (tiered) ─────────────────────────────────────────────────
-// Returns { tiers: number[], displayScore: number }
-// tiers[i] = 0-1 ratio for priority level i (used for lexicographic sort)
-// displayScore = weighted composite 0-100 for the badge
 function scoreSchedule(schedule, prefs, priorityOrder) {
   const blocks = [];
   for (let i = 1; i <= NUM_BLOCKS; i++) {
@@ -188,7 +179,6 @@ function scoreSchedule(schedule, prefs, priorityOrder) {
     });
   }
 
-  // Compute per-category scores
   const catScores = {};
   for (const key of priorityOrder) {
     const scorer = CATEGORY_SCORERS[key];
@@ -199,15 +189,12 @@ function scoreSchedule(schedule, prefs, priorityOrder) {
     }
   }
 
-  // Build tier array: for each priority position, the ratio (0-1).
-  // Categories with max=0 (no prefs set) get ratio=0.5 (neutral, won't affect sort).
   const tiers = priorityOrder.map((key) => {
     const { score, max } = catScores[key];
-    if (max === 0) return 0.5; // neutral — doesn't penalize or reward
+    if (max === 0) return 0.5;
     return score / max;
   });
 
-  // Display score: weighted composite for the badge (still useful for visual)
   let totalScore = 0, totalMax = 0;
   priorityOrder.forEach((key, idx) => {
     const { score, max } = catScores[key];
@@ -220,10 +207,9 @@ function scoreSchedule(schedule, prefs, priorityOrder) {
   return { tiers, displayScore };
 }
 
-// Lexicographic comparator for tier arrays (descending — higher is better)
 function compareTiers(a, b) {
   for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return b[i] - a[i]; // descending
+    if (a[i] !== b[i]) return b[i] - a[i];
   }
   return 0;
 }
@@ -331,7 +317,6 @@ function PriorityRanker({ priorityOrder, onReorder }) {
             key={key}
             className="flex items-center gap-3 px-3 py-2.5 bg-white border border-slate-200 rounded-lg hover:border-slate-300 transition-colors"
           >
-            {/* Rank badge */}
             <span className={`flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold flex-shrink-0 ${
               idx === 0 ? "bg-blue-600 text-white" :
               idx === 1 ? "bg-blue-100 text-blue-700" :
@@ -340,13 +325,11 @@ function PriorityRanker({ priorityOrder, onReorder }) {
               {idx + 1}
             </span>
 
-            {/* Label + weight bar */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-slate-700">{cat.label}</span>
                 <span className="text-[10px] text-slate-400">{cat.desc}</span>
               </div>
-              {/* Weight bar */}
               <div className="mt-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all duration-300"
@@ -358,12 +341,10 @@ function PriorityRanker({ priorityOrder, onReorder }) {
               </div>
             </div>
 
-            {/* Weight label */}
             <span className="text-[10px] font-bold text-slate-400 w-6 text-right flex-shrink-0">
               {weight}x
             </span>
 
-            {/* Move buttons */}
             <div className="flex flex-col gap-0.5 flex-shrink-0">
               <button
                 onClick={() => movePriority(idx, -1)}
@@ -655,7 +636,7 @@ export default function SmartRanker({ schedules, onApplyRankList, onBack }) {
         <button onClick={addAvoidRotation} className="text-xs font-semibold text-blue-500 hover:text-blue-700 transition-colors">+ Add avoidance</button>
       </SectionCard>
 
-      {/* Q7: Rotation-specific site preferences */}
+      {/* Q7: Rotation-specific site preferences — with alternating row colors */}
       <SectionCard title="Hospital preferences by rotation" subtitle="Click a rotation to expand and set prefer/avoid for each site for that rotation">
         <div className="space-y-1">
           {ROTATIONS_WITH_SITES.map((rot) => {
@@ -674,11 +655,11 @@ export default function SmartRanker({ schedules, onApplyRankList, onBack }) {
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`text-slate-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}><path d="M6 9l6 6 6-6" /></svg>
                 </button>
                 {isExpanded && (
-                  <div className="px-3 pb-3 space-y-1.5 border-t border-slate-100 pt-2">
-                    {sites.map((site) => {
+                  <div className="px-3 pb-3 space-y-0 border-t border-slate-100 pt-0">
+                    {sites.map((site, sIdx) => {
                       const current = getRotSitePref(rot, site);
                       return (
-                        <div key={site} className="flex items-center justify-between py-0.5">
+                        <div key={site} className={`flex items-center justify-between py-1.5 px-2 rounded ${sIdx % 2 === 0 ? "bg-slate-50/70" : ""}`}>
                           <span className="text-[11px] text-slate-600">{site}</span>
                           <div className="flex gap-1">
                             <button onClick={() => setRotationSitePref(rot, site, current === "prefer" ? "neutral" : "prefer")}
