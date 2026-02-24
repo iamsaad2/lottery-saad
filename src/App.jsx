@@ -466,7 +466,7 @@ export default function App() {
   const [excluded, setExcluded] = useState({}); // { blockNum: Set<rotation> }
   const [sortBy, setSortBy] = useState("id"); // "id" | "distance" | "city"
   const [searchText, setSearchText] = useState("");
-  const [showFilterGrid, setShowFilterGrid] = useState(false);
+  const [showFilterGrid, setShowFilterGrid] = useState(true);
 
   const fileInputRef = useRef(null);
 
