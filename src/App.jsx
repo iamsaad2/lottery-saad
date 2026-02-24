@@ -833,21 +833,64 @@ export default function App() {
     return [...selectedIndices].filter((i) => !lockedIndices.has(i)).sort((a, b) => a - b);
   }, [selectedIndices, lockedIndices]);
 
+  // Helper: perform a bulk move, remap locks and selection
+  const bulkMoveHelper = (computeNewList) => {
+    setUndoStack((prev) => [...prev.slice(-19), rankList]);
+    // Build old→new index mapping
+    const oldList = rankList;
+    const newList = computeNewList(oldList);
+    // Create a mapping from old schedule identity to new index
+    // Use schedule ID + old index as identity since same schedule could appear once
+    const oldIdentities = oldList.map((item, i) => ({ id: String(item.Schedule).trim(), oldIdx: i }));
+    const newIdentities = newList.map((item, i) => ({ id: String(item.Schedule).trim(), newIdx: i }));
+    // Map old index → new index by matching items
+    const oldToNew = new Map();
+    const usedNew = new Set();
+    // Match greedily: for each old item, find its position in new list
+    for (const { id, oldIdx } of oldIdentities) {
+      for (const { id: nId, newIdx } of newIdentities) {
+        if (nId === id && !usedNew.has(newIdx) && oldList[oldIdx] === newList[newIdx]) {
+          oldToNew.set(oldIdx, newIdx);
+          usedNew.add(newIdx);
+          break;
+        }
+      }
+    }
+
+    setRankList(newList);
+    setLockedIndices((prev) => {
+      const next = new Set();
+      for (const li of prev) {
+        if (oldToNew.has(li)) next.add(oldToNew.get(li));
+      }
+      return next;
+    });
+    setSelectedIndices((prev) => {
+      const next = new Set();
+      for (const si of prev) {
+        if (oldToNew.has(si)) next.add(oldToNew.get(si));
+      }
+      return next;
+    });
+  };
+
   const bulkMoveToTop = () => {
     if (unlockedSelected.length === 0) {
       if (hasLockedSelected) showToast("All selected items are locked", "warn");
       return;
     }
     if (hasLockedSelected) showToast("Skipping locked items", "warn");
-    setUndoStack((prev) => [...prev.slice(-19), rankList]);
     const sorted = unlockedSelected;
-    setRankList((prev) => {
+    const indicesToRemove = new Set(sorted);
+    // Find first unlocked position from top
+    let insertAt = 0;
+    while (insertAt < rankList.length && lockedIndices.has(insertAt) && !indicesToRemove.has(insertAt)) insertAt++;
+    bulkMoveHelper((prev) => {
       const selected = sorted.map((i) => prev[i]);
-      const indicesToRemove = new Set(sorted);
       const rest = prev.filter((_, i) => !indicesToRemove.has(i));
-      return [...selected, ...rest];
+      rest.splice(insertAt > sorted.length ? insertAt - sorted.length : 0, 0, ...selected);
+      return rest;
     });
-    setSelectedIndices(new Set());
     showToast(`Moved ${sorted.length} to top`);
   };
 
@@ -857,15 +900,40 @@ export default function App() {
       return;
     }
     if (hasLockedSelected) showToast("Skipping locked items", "warn");
-    setUndoStack((prev) => [...prev.slice(-19), rankList]);
     const sorted = unlockedSelected;
-    setRankList((prev) => {
+    const indicesToRemove = new Set(sorted);
+    bulkMoveHelper((prev) => {
       const selected = sorted.map((i) => prev[i]);
-      const indicesToRemove = new Set(sorted);
       const rest = prev.filter((_, i) => !indicesToRemove.has(i));
-      return [...rest, ...selected];
+      // Find last unlocked position from bottom in rest array
+      let insertAt = rest.length;
+      while (insertAt > 0 && lockedIndices.has(insertAt - 1 + sorted.filter(s => s < insertAt - 1 + sorted.length).length)) {
+        insertAt--;
+      }
+      // Simpler: find where locked items start at the tail of rest
+      // We need to insert before any trailing locked block in the rest
+      let trailingLocked = 0;
+      for (let i = rest.length - 1; i >= 0; i--) {
+        // Check if this rest item was a locked item in the original list
+        // We need to figure out the original index of rest[i]
+        // rest is prev with indicesToRemove filtered out
+        // So rest items have original indices in order, minus removed ones
+        break; // This approach is too complex, use a different strategy
+      }
+      // Better approach: rebuild with locked positions preserved
+      // Strategy: place items as far down as possible, but above locked tail
+      // Build rest, find how many items at the end of rest are locked
+      const restOriginalIndices = [];
+      prev.forEach((_, i) => { if (!indicesToRemove.has(i)) restOriginalIndices.push(i); });
+      let tailLockCount = 0;
+      for (let i = restOriginalIndices.length - 1; i >= 0; i--) {
+        if (lockedIndices.has(restOriginalIndices[i])) tailLockCount++;
+        else break;
+      }
+      const safeInsert = rest.length - tailLockCount;
+      rest.splice(safeInsert, 0, ...selected);
+      return rest;
     });
-    setSelectedIndices(new Set());
     showToast(`Moved ${sorted.length} to bottom`);
   };
 
@@ -876,49 +944,19 @@ export default function App() {
       return;
     }
     const sorted = unlockedSelected;
-    // Check if the topmost unlocked selected item can move up
     const minIdx = sorted[0];
-    // Find the nearest position above that isn't locked and isn't in the selection
     let target = minIdx - 1;
     while (target >= 0 && (lockedIndices.has(target) || selectedIndices.has(target))) target--;
-    if (target < 0) return; // can't move up further
+    if (target < 0) return;
 
-    setUndoStack((prev) => [...prev.slice(-19), rankList]);
-    setRankList((prev) => {
-      const next = [...prev];
-      // Move each selected unlocked item up by swapping with the item above (that isn't selected/locked)
-      // Strategy: extract unlocked selected, remove them, insert them one position earlier
+    const indicesToRemove = new Set(sorted);
+    bulkMoveHelper((prev) => {
       const items = sorted.map((i) => prev[i]);
-      const indicesToRemove = new Set(sorted);
       const rest = prev.filter((_, i) => !indicesToRemove.has(i));
-      // Find where the first item was in the rest array
-      let insertAt = 0;
-      for (let i = 0; i < rest.length; i++) {
-        // Find the position just before where the first selected item's predecessor is
-        if (i === target - sorted.filter(s => s < target).length) {
-          insertAt = i;
-          break;
-        }
-        insertAt = i + 1;
-      }
-      // Simpler approach: just move the block up by 1 in terms of the non-selected items
-      // The topmost item moves above the item that was directly above it
       const restIndex = minIdx - sorted.filter(s => s < minIdx).length - 1;
       const safeInsert = Math.max(0, restIndex);
       rest.splice(safeInsert, 0, ...items);
       return rest;
-    });
-    // Adjust selection indices
-    setSelectedIndices((prev) => {
-      const next = new Set();
-      for (const i of prev) {
-        if (lockedIndices.has(i)) {
-          next.add(i); // locked items stay
-        } else {
-          next.add(Math.max(0, i - 1));
-        }
-      }
-      return next;
     });
   };
 
@@ -929,34 +967,18 @@ export default function App() {
     }
     const sorted = unlockedSelected;
     const maxIdx = sorted[sorted.length - 1];
-    // Check if the bottommost unlocked selected item can move down
     let target = maxIdx + 1;
     while (target < rankList.length && (lockedIndices.has(target) || selectedIndices.has(target))) target++;
-    if (target >= rankList.length) return; // can't move down further
+    if (target >= rankList.length) return;
 
-    setUndoStack((prev) => [...prev.slice(-19), rankList]);
-    setRankList((prev) => {
+    const indicesToRemove = new Set(sorted);
+    bulkMoveHelper((prev) => {
       const items = sorted.map((i) => prev[i]);
-      const indicesToRemove = new Set(sorted);
       const rest = prev.filter((_, i) => !indicesToRemove.has(i));
-      // Find insert position: after the item that was directly below the last selected item
       const restIndex = maxIdx - sorted.filter(s => s < maxIdx).length;
-      // We want to insert after restIndex, so restIndex + 1
       const safeInsert = Math.min(rest.length, restIndex + 1);
       rest.splice(safeInsert, 0, ...items);
       return rest;
-    });
-    // Adjust selection indices
-    setSelectedIndices((prev) => {
-      const next = new Set();
-      for (const i of prev) {
-        if (lockedIndices.has(i)) {
-          next.add(i);
-        } else {
-          next.add(Math.min(rankList.length - 1, i + 1));
-        }
-      }
-      return next;
     });
   };
 
@@ -967,17 +989,15 @@ export default function App() {
     }
     if (hasLockedSelected) showToast("Skipping locked items", "warn");
     const targetIdx = Math.max(0, Math.min(rankList.length - 1, pos - 1));
-    setUndoStack((prev) => [...prev.slice(-19), rankList]);
     const sorted = unlockedSelected;
-    setRankList((prev) => {
+    const indicesToRemove = new Set(sorted);
+    bulkMoveHelper((prev) => {
       const selected = sorted.map((i) => prev[i]);
-      const indicesToRemove = new Set(sorted);
       const rest = prev.filter((_, i) => !indicesToRemove.has(i));
       const safeTarget = Math.min(targetIdx, rest.length);
       rest.splice(safeTarget, 0, ...selected);
       return rest;
     });
-    setSelectedIndices(new Set());
     showToast(`Moved ${sorted.length} to #${targetIdx + 1}`);
   };
 
@@ -1045,25 +1065,16 @@ export default function App() {
     if (indices.length > 1) {
       const anyLocked = indices.some((i) => lockedIndices.has(i));
       if (anyLocked) { showToast("Unlock selected items first", "warn"); setDragIndex(null); setDragOverIndex(null); setDragOverHalf(null); return; }
-      setUndoStack((prev) => [...prev.slice(-19), rankList]);
-      setRankList((prev) => {
+      const indicesSet = new Set(indices);
+      bulkMoveHelper((prev) => {
         const items = indices.map((i) => prev[i]);
-        const indicesSet = new Set(indices);
         const rest = prev.filter((_, i) => !indicesSet.has(i));
-        // Adjust insert position for removed items before it
         let removedBefore = 0;
         for (const idx of indices) { if (idx < insertIndex) removedBefore++; }
         let safeInsert = Math.min(insertIndex - removedBefore, rest.length);
         safeInsert = Math.max(0, safeInsert);
         rest.splice(safeInsert, 0, ...items);
         return rest;
-      });
-      setSelectedIndices(new Set());
-      setLockedIndices((prev) => {
-        if (prev.size === 0) return prev;
-        const next = new Set();
-        for (const li of prev) { if (!selectedIndices.has(li)) next.add(li); }
-        return next;
       });
     } else if (indices.length === 1) {
       const fromIndex = indices[0];
@@ -1548,16 +1559,48 @@ export default function App() {
                     />
                   </div>
 
-                  {/* Select all */}
-                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={selectedIndices.size === rankList.length && rankList.length > 0}
-                      onChange={selectAll}
-                      className="w-3.5 h-3.5 accent-blue-500"
-                    />
-                    <span className="text-xs text-slate-600 font-medium">Select all</span>
-                  </label>
+                  {/* Select all (hidden when searching) */}
+                  {!rankSearch.trim() && (
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={selectedIndices.size === rankList.length && rankList.length > 0}
+                        onChange={selectAll}
+                        className="w-3.5 h-3.5 accent-blue-500"
+                      />
+                      <span className="text-xs text-slate-600 font-medium">Select all</span>
+                    </label>
+                  )}
+
+                  {/* Select filtered */}
+                  {rankSearch.trim() && filteredRankList.length > 0 && (
+                    <button
+                      onClick={() => {
+                        const filteredOriginalIndices = filteredRankList.map(({ originalIndex }) => originalIndex);
+                        const allFilteredSelected = filteredOriginalIndices.every((i) => selectedIndices.has(i));
+                        if (allFilteredSelected) {
+                          // Deselect filtered
+                          setSelectedIndices((prev) => {
+                            const next = new Set(prev);
+                            filteredOriginalIndices.forEach((i) => next.delete(i));
+                            return next;
+                          });
+                        } else {
+                          // Select filtered
+                          setSelectedIndices((prev) => {
+                            const next = new Set(prev);
+                            filteredOriginalIndices.forEach((i) => next.add(i));
+                            return next;
+                          });
+                        }
+                      }}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-blue-200 text-blue-600 hover:bg-blue-50 transition-all"
+                    >
+                      {filteredRankList.every(({ originalIndex }) => selectedIndices.has(originalIndex))
+                        ? `Deselect ${filteredRankList.length} filtered`
+                        : `Select ${filteredRankList.length} filtered`}
+                    </button>
+                  )}
 
                   {lockedIndices.size > 0 && (
                     <span className="text-[11px] font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full flex items-center gap-1">
