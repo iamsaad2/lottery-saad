@@ -106,13 +106,28 @@ function ToggleChip({ label, active, onClick, color }) {
   );
 }
 
+// ─── Drop Indicator Line ─────────────────────────────────────────────────────
+function DropIndicator({ show }) {
+  if (!show) return null;
+  return (
+    <div className="relative h-0 z-10">
+      <div className="absolute left-0 right-0 h-0.5 bg-blue-500 rounded-full" style={{ top: "-1px" }}>
+        <div className="absolute -left-1 -top-[3px] w-2 h-2 bg-blue-500 rounded-full" />
+        <div className="absolute -right-1 -top-[3px] w-2 h-2 bg-blue-500 rounded-full" />
+      </div>
+    </div>
+  );
+}
+
 // ─── Compact Row (for compact view) ──────────────────────────────────────────
 function CompactRow({
   item, index, total, selected, locked, onSelect, onToggleLock, onMove, onRemove, onReorder,
-  onMoveToTop, onMoveToBottom, dragHandlers, isDragOver, isDragging,
+  onMoveToTop, onMoveToBottom, dragHandlers, isDragOverTop, isDragOverBottom, isDragging, animatingId,
 }) {
   const [editingRank, setEditingRank] = useState(false);
   const [rankInput, setRankInput] = useState("");
+  const schedId = String(item.Schedule).trim();
+  const isAnimating = animatingId === schedId;
 
   const handleRankSubmit = () => {
     const newIndex = parseInt(rankInput, 10) - 1;
@@ -124,113 +139,121 @@ function CompactRow({
   };
 
   return (
-    <div
-      {...(locked ? {} : dragHandlers)}
-      className={cn(
-        "flex items-center gap-2 px-3 py-1.5 bg-white border rounded-lg transition-all group",
-        isDragOver ? "border-blue-400 bg-blue-50 shadow-md" : locked ? "border-amber-200 bg-amber-50/30" : "border-slate-200",
-        isDragging ? "opacity-40 scale-[0.98]" : "",
-        selected ? "ring-2 ring-blue-400 bg-blue-50/30" : "hover:bg-slate-50"
-      )}
-    >
-      {/* Drag handle */}
-      <div className={cn("flex-shrink-0", locked ? "text-slate-200 cursor-not-allowed" : "cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500")} title={locked ? "Locked" : "Drag to reorder"}>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
-      </div>
-
-      {/* Lock button */}
-      <button onClick={(e) => { e.stopPropagation(); onToggleLock(index); }}
-        className={cn("p-0.5 rounded flex-shrink-0 transition-colors", locked ? "text-amber-500 hover:text-amber-600" : "text-slate-300 hover:text-slate-500")}
-        title={locked ? "Unlock position" : "Lock position"}>
-        {locked ? (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-        ) : (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 019.9-1"/></svg>
+    <>
+      <DropIndicator show={isDragOverTop} />
+      <div
+        {...(locked ? {} : dragHandlers)}
+        className={cn(
+          "flex items-center gap-2 px-3 py-1.5 bg-white border rounded-lg transition-all group",
+          locked ? "border-amber-200 bg-amber-50/30" : "border-slate-200",
+          isDragging ? "opacity-40 scale-[0.98]" : "",
+          selected ? "ring-2 ring-blue-400 bg-blue-50/30" : "hover:bg-slate-50",
+          isAnimating ? "animate-flash-highlight" : ""
         )}
-      </button>
+      >
+        {/* Drag handle */}
+        <div className={cn("flex-shrink-0", locked ? "text-slate-200 cursor-not-allowed" : "cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500")} title={locked ? "Locked" : "Drag to reorder"}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
+        </div>
 
-      {/* Select checkbox */}
-      <input
-        type="checkbox"
-        checked={selected}
-        onChange={() => onSelect(index)}
-        className="w-3.5 h-3.5 accent-blue-500 flex-shrink-0 cursor-pointer"
-        onClick={(e) => e.stopPropagation()}
-      />
+        {/* Lock button */}
+        <button onClick={(e) => { e.stopPropagation(); onToggleLock(index); }}
+          className={cn("p-0.5 rounded flex-shrink-0 transition-colors", locked ? "text-amber-500 hover:text-amber-600" : "text-slate-300 hover:text-slate-500")}
+          title={locked ? "Unlock position" : "Lock position"}>
+          {locked ? (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+          ) : (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 019.9-1"/></svg>
+          )}
+        </button>
 
-      {/* Rank badge */}
-      {editingRank ? (
+        {/* Select checkbox */}
         <input
-          type="number" autoFocus min={1} max={total} value={rankInput}
-          onChange={(e) => setRankInput(e.target.value)}
-          onBlur={handleRankSubmit}
-          onKeyDown={(e) => { if (e.key === "Enter") handleRankSubmit(); if (e.key === "Escape") { setEditingRank(false); setRankInput(""); } }}
-          className="w-10 h-6 rounded border border-blue-400 text-center text-[11px] font-bold text-blue-600 focus:outline-none bg-blue-50"
+          type="checkbox"
+          checked={selected}
+          onChange={() => onSelect(index)}
+          className="w-3.5 h-3.5 accent-blue-500 flex-shrink-0 cursor-pointer"
           onClick={(e) => e.stopPropagation()}
         />
-      ) : (
-        <button
-          onClick={(e) => { e.stopPropagation(); setEditingRank(true); setRankInput(String(index + 1)); }}
-          className="relative flex items-center justify-center w-8 h-6 rounded border-2 border-slate-300 bg-white text-[11px] font-bold text-slate-700 hover:border-blue-400 hover:text-blue-600 transition-colors cursor-text flex-shrink-0 group/rank"
-          title="Click to type a rank number"
-        >
-          {index + 1}
-        </button>
-      )}
 
-      {/* Schedule info */}
-      <span className="font-bold text-slate-700 text-xs">#{item.Schedule}</span>
-      <span className="text-[11px] text-slate-500 font-medium">{item["Dominant City"]}</span>
+        {/* Rank badge */}
+        {editingRank ? (
+          <input
+            type="number" autoFocus min={1} max={total} value={rankInput}
+            onChange={(e) => setRankInput(e.target.value)}
+            onBlur={handleRankSubmit}
+            onKeyDown={(e) => { if (e.key === "Enter") handleRankSubmit(); if (e.key === "Escape") { setEditingRank(false); setRankInput(""); } }}
+            className="w-10 h-6 rounded border border-blue-400 text-center text-[11px] font-bold text-blue-600 focus:outline-none bg-blue-50"
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <button
+            onClick={(e) => { e.stopPropagation(); setEditingRank(true); setRankInput(String(index + 1)); }}
+            className="relative flex items-center justify-center w-8 h-6 rounded border-2 border-slate-300 bg-white text-[11px] font-bold text-slate-700 hover:border-blue-400 hover:text-blue-600 transition-colors cursor-text flex-shrink-0 group/rank"
+            title="Click to type a rank number"
+          >
+            {index + 1}
+          </button>
+        )}
 
-      {/* Rotation summary chips */}
-      <div className="flex-1 flex gap-0.5 overflow-hidden ml-1">
-        {Array.from({ length: NUM_BLOCKS }, (_, i) => {
-          const rot = (item[`Block ${i + 1} Rotation`] || "").trim();
-          return (
-            <span
-              key={i}
-              className="inline-block w-1.5 h-4 rounded-sm flex-shrink-0"
-              style={{ backgroundColor: colorFor(rot) }}
-              title={`B${i + 1}: ${rot}`}
-            />
-          );
-        })}
+        {/* Schedule info */}
+        <span className="font-bold text-slate-700 text-xs">#{item.Schedule}</span>
+        <span className="text-[11px] text-slate-500 font-medium">{item["Dominant City"]}</span>
+
+        {/* Rotation summary chips */}
+        <div className="flex-1 flex gap-0.5 overflow-hidden ml-1">
+          {Array.from({ length: NUM_BLOCKS }, (_, i) => {
+            const rot = (item[`Block ${i + 1} Rotation`] || "").trim();
+            return (
+              <span
+                key={i}
+                className="inline-block w-1.5 h-4 rounded-sm flex-shrink-0"
+                style={{ backgroundColor: colorFor(rot) }}
+                title={`B${i + 1}: ${rot}`}
+              />
+            );
+          })}
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+          <button onClick={(e) => { e.stopPropagation(); onMoveToTop(index); }} disabled={index === 0}
+            className="p-1 rounded hover:bg-slate-200 disabled:opacity-20 text-slate-400 text-[10px] font-bold" title="Move to top">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="5 12 12 5 19 12"/><line x1="5" y1="3" x2="19" y2="3"/></svg>
+          </button>
+          <button onClick={(e) => { e.stopPropagation(); onMove(index, -1); }} disabled={index === 0}
+            className="p-1 rounded hover:bg-slate-200 disabled:opacity-20 text-slate-400" title="Move up">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
+          </button>
+          <button onClick={(e) => { e.stopPropagation(); onMove(index, 1); }} disabled={index === total - 1}
+            className="p-1 rounded hover:bg-slate-200 disabled:opacity-20 text-slate-400" title="Move down">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <button onClick={(e) => { e.stopPropagation(); onMoveToBottom(index); }} disabled={index === total - 1}
+            className="p-1 rounded hover:bg-slate-200 disabled:opacity-20 text-slate-400" title="Move to bottom">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/><line x1="5" y1="21" x2="19" y2="21"/></svg>
+          </button>
+          <button onClick={(e) => { e.stopPropagation(); onRemove(index); }}
+            className="p-1 rounded hover:bg-red-100 text-slate-400 hover:text-red-500 ml-0.5" title="Remove">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
       </div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-        <button onClick={(e) => { e.stopPropagation(); onMoveToTop(index); }} disabled={index === 0}
-          className="p-1 rounded hover:bg-slate-200 disabled:opacity-20 text-slate-400 text-[10px] font-bold" title="Move to top">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="5 12 12 5 19 12"/><line x1="5" y1="3" x2="19" y2="3"/></svg>
-        </button>
-        <button onClick={(e) => { e.stopPropagation(); onMove(index, -1); }} disabled={index === 0}
-          className="p-1 rounded hover:bg-slate-200 disabled:opacity-20 text-slate-400" title="Move up">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
-        </button>
-        <button onClick={(e) => { e.stopPropagation(); onMove(index, 1); }} disabled={index === total - 1}
-          className="p-1 rounded hover:bg-slate-200 disabled:opacity-20 text-slate-400" title="Move down">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-        </button>
-        <button onClick={(e) => { e.stopPropagation(); onMoveToBottom(index); }} disabled={index === total - 1}
-          className="p-1 rounded hover:bg-slate-200 disabled:opacity-20 text-slate-400" title="Move to bottom">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/><line x1="5" y1="21" x2="19" y2="21"/></svg>
-        </button>
-        <button onClick={(e) => { e.stopPropagation(); onRemove(index); }}
-          className="p-1 rounded hover:bg-red-100 text-slate-400 hover:text-red-500 ml-0.5" title="Remove">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-    </div>
+      {/* Show bottom indicator only on the very last item */}
+      {index === total - 1 && <DropIndicator show={isDragOverBottom} />}
+    </>
   );
 }
 
 // ─── Schedule Card (expanded view for rank list) ────────────────────────────
 function ScheduleCard({
   item, index, total, selected, locked, onSelect, onToggleLock, onMove, onRemove, onReorder,
-  onMoveToTop, onMoveToBottom, dragHandlers, isDragOver, isDragging,
+  onMoveToTop, onMoveToBottom, dragHandlers, isDragOverTop, isDragOverBottom, isDragging, animatingId,
 }) {
   const [editingRank, setEditingRank] = useState(false);
   const [rankInput, setRankInput] = useState("");
+  const schedId = String(item.Schedule).trim();
+  const isAnimating = animatingId === schedId;
 
   const handleRankSubmit = () => {
     const newIndex = parseInt(rankInput, 10) - 1;
@@ -242,104 +265,110 @@ function ScheduleCard({
   };
 
   return (
-    <div
-      {...(locked ? {} : dragHandlers)}
-      className={cn(
-        "bg-white rounded-xl border shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden group",
-        isDragOver ? "border-blue-400 bg-blue-50 shadow-lg ring-2 ring-blue-200" : locked ? "border-amber-200" : "border-slate-200",
-        isDragging ? "opacity-40 scale-[0.98]" : "",
-        selected ? "ring-2 ring-blue-400" : ""
-      )}
-    >
-      <div className={cn("flex items-center justify-between px-4 py-3 border-b border-slate-100", locked ? "bg-amber-50/50" : "bg-slate-50/80")}>
-        <div className="flex items-center gap-3">
-          {/* Drag handle */}
-          <div className={cn(locked ? "text-slate-200 cursor-not-allowed" : "cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500")} title={locked ? "Locked" : "Drag to reorder"}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
-          </div>
-
-          {/* Lock button */}
-          <button onClick={() => onToggleLock(index)}
-            className={cn("p-1 rounded transition-colors", locked ? "text-amber-500 hover:text-amber-600" : "text-slate-300 hover:text-slate-500")}
-            title={locked ? "Unlock position" : "Lock position"}>
-            {locked ? (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-            ) : (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 019.9-1"/></svg>
-            )}
-          </button>
-
-          {/* Select checkbox */}
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={() => onSelect(index)}
-            className="w-3.5 h-3.5 accent-blue-500 cursor-pointer"
-          />
-
-          {editingRank ? (
-            <input
-              type="number" autoFocus min={1} max={total} value={rankInput}
-              onChange={(e) => setRankInput(e.target.value)}
-              onBlur={handleRankSubmit}
-              onKeyDown={(e) => { if (e.key === "Enter") handleRankSubmit(); if (e.key === "Escape") { setEditingRank(false); setRankInput(""); } }}
-              className="w-12 h-8 rounded-lg border-2 border-blue-400 text-center text-sm font-bold text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500/30 bg-blue-50"
-            />
-          ) : (
-            <button
-              onClick={() => { setEditingRank(true); setRankInput(String(index + 1)); }}
-              className="relative flex items-center justify-center w-10 h-8 rounded-lg border-2 border-slate-300 bg-white text-sm font-bold text-slate-700 shadow-sm hover:border-blue-400 hover:text-blue-600 transition-colors cursor-text group/rank"
-              title="Click to type a rank number"
-            >
-              {index + 1}
-            </button>
-          )}
-          <div>
-            <span className="font-bold text-slate-800 text-sm">
-              Schedule {item.Schedule}
-            </span>
-            <span className="ml-2 text-xs text-slate-500 font-medium">
-              {item["Dominant City"]}
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-          <button onClick={() => onMoveToTop(index)} disabled={index === 0}
-            className="p-1.5 rounded-md hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-slate-500" title="Move to top">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="5 12 12 5 19 12"/><line x1="5" y1="3" x2="19" y2="3"/></svg>
-          </button>
-          <button onClick={() => onMove(index, -1)} disabled={index === 0}
-            className="p-1.5 rounded-md hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-slate-500" title="Move up">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
-          </button>
-          <button onClick={() => onMove(index, 1)} disabled={index === total - 1}
-            className="p-1.5 rounded-md hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-slate-500" title="Move down">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-          </button>
-          <button onClick={() => onMoveToBottom(index)} disabled={index === total - 1}
-            className="p-1.5 rounded-md hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-slate-500" title="Move to bottom">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/><line x1="5" y1="21" x2="19" y2="21"/></svg>
-          </button>
-          <button onClick={() => onRemove(index)}
-            className="p-1.5 rounded-md hover:bg-red-100 text-slate-400 hover:text-red-500 ml-1" title="Remove">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
-      </div>
-      <div className="grid grid-cols-9 divide-x divide-slate-100">
-        {Array.from({ length: NUM_BLOCKS }, (_, i) => {
-          const rot = (item[`Block ${i + 1} Rotation`] || "").trim();
-          const site = (item[`Block ${i + 1} Site`] || "").trim();
-          return (
-            <div key={i} className="px-2 py-2.5 text-center flex flex-col items-center gap-1">
-              <span className="text-[10px] text-slate-400 font-medium">B{i + 1}</span>
-              <RotationBadge rotation={rot} size="sm" />
-              <SiteLabel site={site} />
+    <>
+      <DropIndicator show={isDragOverTop} />
+      <div
+        {...(locked ? {} : dragHandlers)}
+        className={cn(
+          "bg-white rounded-xl border shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden group",
+          locked ? "border-amber-200" : "border-slate-200",
+          isDragging ? "opacity-40 scale-[0.98]" : "",
+          selected ? "ring-2 ring-blue-400" : "",
+          isAnimating ? "animate-flash-highlight" : ""
+        )}
+      >
+        <div className={cn("flex items-center justify-between px-4 py-3 border-b border-slate-100", locked ? "bg-amber-50/50" : "bg-slate-50/80")}>
+          <div className="flex items-center gap-3">
+            {/* Drag handle */}
+            <div className={cn(locked ? "text-slate-200 cursor-not-allowed" : "cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500")} title={locked ? "Locked" : "Drag to reorder"}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
             </div>
-          );
-        })}
+
+            {/* Lock button */}
+            <button onClick={() => onToggleLock(index)}
+              className={cn("p-1 rounded transition-colors", locked ? "text-amber-500 hover:text-amber-600" : "text-slate-300 hover:text-slate-500")}
+              title={locked ? "Unlock position" : "Lock position"}>
+              {locked ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 019.9-1"/></svg>
+              )}
+            </button>
+
+            {/* Select checkbox */}
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onSelect(index)}
+              className="w-3.5 h-3.5 accent-blue-500 cursor-pointer"
+            />
+
+            {editingRank ? (
+              <input
+                type="number" autoFocus min={1} max={total} value={rankInput}
+                onChange={(e) => setRankInput(e.target.value)}
+                onBlur={handleRankSubmit}
+                onKeyDown={(e) => { if (e.key === "Enter") handleRankSubmit(); if (e.key === "Escape") { setEditingRank(false); setRankInput(""); } }}
+                className="w-12 h-8 rounded-lg border-2 border-blue-400 text-center text-sm font-bold text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500/30 bg-blue-50"
+              />
+            ) : (
+              <button
+                onClick={() => { setEditingRank(true); setRankInput(String(index + 1)); }}
+                className="relative flex items-center justify-center w-10 h-8 rounded-lg border-2 border-slate-300 bg-white text-sm font-bold text-slate-700 shadow-sm hover:border-blue-400 hover:text-blue-600 transition-colors cursor-text group/rank"
+                title="Click to type a rank number"
+              >
+                {index + 1}
+              </button>
+            )}
+            <div>
+              <span className="font-bold text-slate-800 text-sm">
+                Schedule {item.Schedule}
+              </span>
+              <span className="ml-2 text-xs text-slate-500 font-medium">
+                {item["Dominant City"]}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+            <button onClick={() => onMoveToTop(index)} disabled={index === 0}
+              className="p-1.5 rounded-md hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-slate-500" title="Move to top">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="5 12 12 5 19 12"/><line x1="5" y1="3" x2="19" y2="3"/></svg>
+            </button>
+            <button onClick={() => onMove(index, -1)} disabled={index === 0}
+              className="p-1.5 rounded-md hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-slate-500" title="Move up">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
+            </button>
+            <button onClick={() => onMove(index, 1)} disabled={index === total - 1}
+              className="p-1.5 rounded-md hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-slate-500" title="Move down">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <button onClick={() => onMoveToBottom(index)} disabled={index === total - 1}
+              className="p-1.5 rounded-md hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-slate-500" title="Move to bottom">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/><line x1="5" y1="21" x2="19" y2="21"/></svg>
+            </button>
+            <button onClick={() => onRemove(index)}
+              className="p-1.5 rounded-md hover:bg-red-100 text-slate-400 hover:text-red-500 ml-1" title="Remove">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        </div>
+        <div className="grid grid-cols-9 divide-x divide-slate-100">
+          {Array.from({ length: NUM_BLOCKS }, (_, i) => {
+            const rot = (item[`Block ${i + 1} Rotation`] || "").trim();
+            const site = (item[`Block ${i + 1} Site`] || "").trim();
+            return (
+              <div key={i} className="px-2 py-2.5 text-center flex flex-col items-center gap-1">
+                <span className="text-[10px] text-slate-400 font-medium">B{i + 1}</span>
+                <RotationBadge rotation={rot} size="sm" />
+                <SiteLabel site={site} />
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </div>
+      {/* Show bottom indicator only on the very last item */}
+      {index === total - 1 && <DropIndicator show={isDragOverBottom} />}
+    </>
   );
 }
 
@@ -455,9 +484,11 @@ export default function App() {
   const [selectedIndices, setSelectedIndices] = useState(new Set());
   const [dragIndex, setDragIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
+  const [dragOverHalf, setDragOverHalf] = useState(null); // "top" | "bottom"
   const [undoStack, setUndoStack] = useState([]);
   const [rankSearch, setRankSearch] = useState("");
   const [lockedIndices, setLockedIndices] = useState(new Set());
+  const [animatingId, setAnimatingId] = useState(null);
 
   // Filters
   const [selectedCities, setSelectedCities] = useState(new Set());
@@ -469,6 +500,12 @@ export default function App() {
   const [showFilterGrid, setShowFilterGrid] = useState(true);
 
   const fileInputRef = useRef(null);
+
+  // ─── Flash animation helper ────────────────────────────────────────────────
+  const flashAnimate = useCallback((scheduleId) => {
+    setAnimatingId(scheduleId);
+    setTimeout(() => setAnimatingId(null), 500);
+  }, []);
 
   // ─── Load CSV ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -603,7 +640,6 @@ export default function App() {
     setExcluded((prev) => {
       const next = { ...prev };
       if (rotation === "all") {
-        // If everything is checked, uncheck all. Otherwise check all.
         const anyExcluded = Object.values(next).some((s) => s.size > 0);
         if (anyExcluded) {
           return {};
@@ -615,7 +651,6 @@ export default function App() {
           return fresh;
         }
       }
-      // Toggle all blocks for a specific rotation
       const allExcluded = Array.from({ length: NUM_BLOCKS }, (_, i) => i + 1).every(
         (b) => next[b] && next[b].has(rotation)
       );
@@ -636,10 +671,8 @@ export default function App() {
         (spec) => !(next[block] && next[block].has(spec))
       );
       if (allChecked) {
-        // All are checked → uncheck all in this column
         next[block] = new Set(SPECIALTIES);
       } else {
-        // Some unchecked → check all in this column
         next[block] = new Set();
       }
       return next;
@@ -660,7 +693,6 @@ export default function App() {
     if (lockedIndices.has(index)) { showToast("Unlock first to remove", "warn"); return; }
     setUndoStack((prev) => [...prev.slice(-19), rankList]);
     setRankList((prev) => prev.filter((_, i) => i !== index));
-    // Adjust locked indices after removal
     setLockedIndices((prev) => {
       const next = new Set();
       for (const li of prev) {
@@ -682,20 +714,19 @@ export default function App() {
   const moveRank = (index, dir) => {
     if (lockedIndices.has(index)) { showToast("Unlock first to move", "warn"); return; }
     let newIndex = index + dir;
-    // Skip over locked items
     while (newIndex >= 0 && newIndex < rankList.length && lockedIndices.has(newIndex)) {
       newIndex += dir;
     }
     if (newIndex < 0 || newIndex >= rankList.length) return;
     setUndoStack((prev) => [...prev.slice(-19), rankList]);
-    // Use reorderRank logic (splice) instead of swap so we skip over locks properly
     setRankList((prev) => {
       const next = [...prev];
       const [item] = next.splice(index, 1);
       next.splice(newIndex, 0, item);
       return next;
     });
-    // Remap locked indices
+    // Flash the moved item
+    flashAnimate(String(rankList[index].Schedule).trim());
     setLockedIndices((prev) => {
       const next = new Set();
       for (const li of prev) {
@@ -721,7 +752,7 @@ export default function App() {
       next.splice(toIndex, 0, item);
       return next;
     });
-    // Remap locked indices
+    flashAnimate(String(rankList[fromIndex].Schedule).trim());
     setLockedIndices((prev) => {
       const next = new Set();
       for (const li of prev) {
@@ -741,10 +772,9 @@ export default function App() {
   const moveToTop = (index) => {
     if (index === 0) return;
     if (lockedIndices.has(index)) { showToast("Unlock first to move", "warn"); return; }
-    // Find the first unlocked position from the top
     let target = 0;
     while (target < index && lockedIndices.has(target)) target++;
-    if (target >= index) return; // all positions above are locked
+    if (target >= index) return;
     reorderRank(index, target);
     showToast(`Moved to #${target + 1}`);
   };
@@ -752,10 +782,9 @@ export default function App() {
   const moveToBottom = (index) => {
     if (index === rankList.length - 1) return;
     if (lockedIndices.has(index)) { showToast("Unlock first to move", "warn"); return; }
-    // Find the last unlocked position from the bottom
     let target = rankList.length - 1;
     while (target > index && lockedIndices.has(target)) target--;
-    if (target <= index) return; // all positions below are locked
+    if (target <= index) return;
     reorderRank(index, target);
     showToast(`Moved to #${target + 1}`);
   };
@@ -794,13 +823,28 @@ export default function App() {
     }
   };
 
+  // Helper: check if any selected items are locked
+  const hasLockedSelected = useMemo(() => {
+    return [...selectedIndices].some((i) => lockedIndices.has(i));
+  }, [selectedIndices, lockedIndices]);
+
+  // Helper: get only unlocked selected indices
+  const unlockedSelected = useMemo(() => {
+    return [...selectedIndices].filter((i) => !lockedIndices.has(i)).sort((a, b) => a - b);
+  }, [selectedIndices, lockedIndices]);
+
   const bulkMoveToTop = () => {
-    if (selectedIndices.size === 0) return;
+    if (unlockedSelected.length === 0) {
+      if (hasLockedSelected) showToast("All selected items are locked", "warn");
+      return;
+    }
+    if (hasLockedSelected) showToast("Skipping locked items", "warn");
     setUndoStack((prev) => [...prev.slice(-19), rankList]);
-    const sorted = [...selectedIndices].sort((a, b) => a - b);
+    const sorted = unlockedSelected;
     setRankList((prev) => {
       const selected = sorted.map((i) => prev[i]);
-      const rest = prev.filter((_, i) => !selectedIndices.has(i));
+      const indicesToRemove = new Set(sorted);
+      const rest = prev.filter((_, i) => !indicesToRemove.has(i));
       return [...selected, ...rest];
     });
     setSelectedIndices(new Set());
@@ -808,27 +852,129 @@ export default function App() {
   };
 
   const bulkMoveToBottom = () => {
-    if (selectedIndices.size === 0) return;
+    if (unlockedSelected.length === 0) {
+      if (hasLockedSelected) showToast("All selected items are locked", "warn");
+      return;
+    }
+    if (hasLockedSelected) showToast("Skipping locked items", "warn");
     setUndoStack((prev) => [...prev.slice(-19), rankList]);
-    const sorted = [...selectedIndices].sort((a, b) => a - b);
+    const sorted = unlockedSelected;
     setRankList((prev) => {
       const selected = sorted.map((i) => prev[i]);
-      const rest = prev.filter((_, i) => !selectedIndices.has(i));
+      const indicesToRemove = new Set(sorted);
+      const rest = prev.filter((_, i) => !indicesToRemove.has(i));
       return [...rest, ...selected];
     });
     setSelectedIndices(new Set());
     showToast(`Moved ${sorted.length} to bottom`);
   };
 
+  // Bulk move up/down by 1 position (keeping relative order)
+  const bulkMoveUp = () => {
+    if (unlockedSelected.length === 0) {
+      if (hasLockedSelected) showToast("All selected items are locked", "warn");
+      return;
+    }
+    const sorted = unlockedSelected;
+    // Check if the topmost unlocked selected item can move up
+    const minIdx = sorted[0];
+    // Find the nearest position above that isn't locked and isn't in the selection
+    let target = minIdx - 1;
+    while (target >= 0 && (lockedIndices.has(target) || selectedIndices.has(target))) target--;
+    if (target < 0) return; // can't move up further
+
+    setUndoStack((prev) => [...prev.slice(-19), rankList]);
+    setRankList((prev) => {
+      const next = [...prev];
+      // Move each selected unlocked item up by swapping with the item above (that isn't selected/locked)
+      // Strategy: extract unlocked selected, remove them, insert them one position earlier
+      const items = sorted.map((i) => prev[i]);
+      const indicesToRemove = new Set(sorted);
+      const rest = prev.filter((_, i) => !indicesToRemove.has(i));
+      // Find where the first item was in the rest array
+      let insertAt = 0;
+      for (let i = 0; i < rest.length; i++) {
+        // Find the position just before where the first selected item's predecessor is
+        if (i === target - sorted.filter(s => s < target).length) {
+          insertAt = i;
+          break;
+        }
+        insertAt = i + 1;
+      }
+      // Simpler approach: just move the block up by 1 in terms of the non-selected items
+      // The topmost item moves above the item that was directly above it
+      const restIndex = minIdx - sorted.filter(s => s < minIdx).length - 1;
+      const safeInsert = Math.max(0, restIndex);
+      rest.splice(safeInsert, 0, ...items);
+      return rest;
+    });
+    // Adjust selection indices
+    setSelectedIndices((prev) => {
+      const next = new Set();
+      for (const i of prev) {
+        if (lockedIndices.has(i)) {
+          next.add(i); // locked items stay
+        } else {
+          next.add(Math.max(0, i - 1));
+        }
+      }
+      return next;
+    });
+  };
+
+  const bulkMoveDown = () => {
+    if (unlockedSelected.length === 0) {
+      if (hasLockedSelected) showToast("All selected items are locked", "warn");
+      return;
+    }
+    const sorted = unlockedSelected;
+    const maxIdx = sorted[sorted.length - 1];
+    // Check if the bottommost unlocked selected item can move down
+    let target = maxIdx + 1;
+    while (target < rankList.length && (lockedIndices.has(target) || selectedIndices.has(target))) target++;
+    if (target >= rankList.length) return; // can't move down further
+
+    setUndoStack((prev) => [...prev.slice(-19), rankList]);
+    setRankList((prev) => {
+      const items = sorted.map((i) => prev[i]);
+      const indicesToRemove = new Set(sorted);
+      const rest = prev.filter((_, i) => !indicesToRemove.has(i));
+      // Find insert position: after the item that was directly below the last selected item
+      const restIndex = maxIdx - sorted.filter(s => s < maxIdx).length;
+      // We want to insert after restIndex, so restIndex + 1
+      const safeInsert = Math.min(rest.length, restIndex + 1);
+      rest.splice(safeInsert, 0, ...items);
+      return rest;
+    });
+    // Adjust selection indices
+    setSelectedIndices((prev) => {
+      const next = new Set();
+      for (const i of prev) {
+        if (lockedIndices.has(i)) {
+          next.add(i);
+        } else {
+          next.add(Math.min(rankList.length - 1, i + 1));
+        }
+      }
+      return next;
+    });
+  };
+
   const bulkMoveToPosition = (pos) => {
-    if (selectedIndices.size === 0 || isNaN(pos)) return;
+    if (unlockedSelected.length === 0 || isNaN(pos)) {
+      if (hasLockedSelected) showToast("All selected items are locked", "warn");
+      return;
+    }
+    if (hasLockedSelected) showToast("Skipping locked items", "warn");
     const targetIdx = Math.max(0, Math.min(rankList.length - 1, pos - 1));
     setUndoStack((prev) => [...prev.slice(-19), rankList]);
-    const sorted = [...selectedIndices].sort((a, b) => a - b);
+    const sorted = unlockedSelected;
     setRankList((prev) => {
       const selected = sorted.map((i) => prev[i]);
-      const rest = prev.filter((_, i) => !selectedIndices.has(i));
-      rest.splice(targetIdx, 0, ...selected);
+      const indicesToRemove = new Set(sorted);
+      const rest = prev.filter((_, i) => !indicesToRemove.has(i));
+      const safeTarget = Math.min(targetIdx, rest.length);
+      rest.splice(safeTarget, 0, ...selected);
       return rest;
     });
     setSelectedIndices(new Set());
@@ -837,20 +983,29 @@ export default function App() {
 
   const bulkRemove = () => {
     if (selectedIndices.size === 0) return;
+    // Check for locked items
+    const lockedSelected = [...selectedIndices].filter((i) => lockedIndices.has(i));
+    if (lockedSelected.length === selectedIndices.size) {
+      showToast("All selected items are locked", "warn");
+      return;
+    }
+    if (lockedSelected.length > 0) {
+      showToast(`Skipping ${lockedSelected.length} locked item(s)`, "warn");
+    }
+    const toRemove = new Set(unlockedSelected);
     setUndoStack((prev) => [...prev.slice(-19), rankList]);
-    setRankList((prev) => prev.filter((_, i) => !selectedIndices.has(i)));
-    showToast(`Removed ${selectedIndices.size} schedules`);
+    setRankList((prev) => prev.filter((_, i) => !toRemove.has(i)));
+    showToast(`Removed ${toRemove.size} schedules`);
     setSelectedIndices(new Set());
   };
 
-  // Drag and drop (supports multi-drag when dragging a selected item)
+  // Drag and drop — improved with "between items" indicator
   const handleDragStart = (index) => (e) => {
     if (lockedIndices.has(index)) { e.preventDefault(); return; }
     setDragIndex(index);
     e.dataTransfer.effectAllowed = "move";
-    // If dragging a selected item, store all selected indices
     if (selectedIndices.has(index) && selectedIndices.size > 1) {
-      const indices = [...selectedIndices].sort((a, b) => a - b);
+      const indices = [...selectedIndices].filter((i) => !lockedIndices.has(i)).sort((a, b) => a - b);
       e.dataTransfer.setData("text/plain", indices.join(","));
     } else {
       e.dataTransfer.setData("text/plain", String(index));
@@ -860,12 +1015,20 @@ export default function App() {
   const handleDragOver = (index) => (e) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    if (dragOverIndex !== index) setDragOverIndex(index);
+    // Determine if we're in the top or bottom half of the element
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const half = y < rect.height / 2 ? "top" : "bottom";
+    if (dragOverIndex !== index || dragOverHalf !== half) {
+      setDragOverIndex(index);
+      setDragOverHalf(half);
+    }
   };
 
   const handleDragEnd = () => {
     setDragIndex(null);
     setDragOverIndex(null);
+    setDragOverHalf(null);
   };
 
   const handleDrop = (toIndex) => (e) => {
@@ -873,41 +1036,47 @@ export default function App() {
     const raw = e.dataTransfer.getData("text/plain");
     const indices = raw.split(",").map(Number).filter((n) => !isNaN(n));
 
+    // Calculate actual insert index based on which half we dropped on
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const dropAfter = y >= rect.height / 2;
+    let insertIndex = dropAfter ? toIndex + 1 : toIndex;
+
     if (indices.length > 1) {
-      // Multi-drag: move all selected items to the drop position
       const anyLocked = indices.some((i) => lockedIndices.has(i));
-      if (anyLocked) { showToast("Unlock selected items first", "warn"); setDragIndex(null); setDragOverIndex(null); return; }
+      if (anyLocked) { showToast("Unlock selected items first", "warn"); setDragIndex(null); setDragOverIndex(null); setDragOverHalf(null); return; }
       setUndoStack((prev) => [...prev.slice(-19), rankList]);
       setRankList((prev) => {
         const items = indices.map((i) => prev[i]);
-        const rest = prev.filter((_, i) => !selectedIndices.has(i));
-        // Find insert position in the "rest" array
-        let insertAt = toIndex;
+        const indicesSet = new Set(indices);
+        const rest = prev.filter((_, i) => !indicesSet.has(i));
         // Adjust insert position for removed items before it
         let removedBefore = 0;
-        for (const idx of indices) { if (idx < toIndex) removedBefore++; }
-        insertAt = Math.min(insertAt - removedBefore, rest.length);
-        insertAt = Math.max(0, insertAt);
-        rest.splice(insertAt, 0, ...items);
+        for (const idx of indices) { if (idx < insertIndex) removedBefore++; }
+        let safeInsert = Math.min(insertIndex - removedBefore, rest.length);
+        safeInsert = Math.max(0, safeInsert);
+        rest.splice(safeInsert, 0, ...items);
         return rest;
       });
       setSelectedIndices(new Set());
-      // Reset locked indices (simplification — complex remap not needed for multi-drag)
       setLockedIndices((prev) => {
         if (prev.size === 0) return prev;
-        // Keep only locks that weren't part of the drag
         const next = new Set();
         for (const li of prev) { if (!selectedIndices.has(li)) next.add(li); }
         return next;
       });
     } else if (indices.length === 1) {
       const fromIndex = indices[0];
-      if (fromIndex !== toIndex) {
-        reorderRank(fromIndex, toIndex);
+      // Adjust insert index if from is before to
+      let adjustedTo = insertIndex;
+      if (fromIndex < insertIndex) adjustedTo -= 1;
+      if (fromIndex !== adjustedTo && adjustedTo >= 0 && adjustedTo < rankList.length) {
+        reorderRank(fromIndex, adjustedTo);
       }
     }
     setDragIndex(null);
     setDragOverIndex(null);
+    setDragOverHalf(null);
   };
 
   // Filtered rank list for search
@@ -997,6 +1166,17 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {/* Inline style for flash animation */}
+      <style>{`
+        @keyframes flash-highlight {
+          0% { background-color: rgba(59, 130, 246, 0.15); }
+          100% { background-color: transparent; }
+        }
+        .animate-flash-highlight {
+          animation: flash-highlight 0.5s ease-out;
+        }
+      `}</style>
+
       {/* Toast */}
       {toast && (
         <div
@@ -1392,14 +1572,31 @@ export default function App() {
                   <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
                     <span className="text-xs font-semibold text-blue-600">
                       {selectedIndices.size} selected
+                      {hasLockedSelected && (
+                        <span className="text-amber-500 ml-1">
+                          ({[...selectedIndices].filter((i) => lockedIndices.has(i)).length} locked)
+                        </span>
+                      )}
                     </span>
                     <button onClick={bulkMoveToTop}
-                      className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50">
-                      Move to top
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50"
+                      title="Move selected to top">
+                      ⇈ Top
+                    </button>
+                    <button onClick={bulkMoveUp}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50"
+                      title="Move selected up one position">
+                      ↑ Up
+                    </button>
+                    <button onClick={bulkMoveDown}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50"
+                      title="Move selected down one position">
+                      ↓ Down
                     </button>
                     <button onClick={bulkMoveToBottom}
-                      className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50">
-                      Move to bottom
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50"
+                      title="Move selected to bottom">
+                      ⇊ Bottom
                     </button>
                     <div className="flex items-center gap-1">
                       <span className="text-[11px] text-slate-500">Move to #</span>
@@ -1473,6 +1670,7 @@ export default function App() {
                     onReorder={reorderRank}
                     onMoveToTop={moveToTop}
                     onMoveToBottom={moveToBottom}
+                    animatingId={animatingId}
                     dragHandlers={{
                       draggable: true,
                       onDragStart: handleDragStart(originalIndex),
@@ -1480,7 +1678,8 @@ export default function App() {
                       onDragEnd: handleDragEnd,
                       onDrop: handleDrop(originalIndex),
                     }}
-                    isDragOver={dragOverIndex === originalIndex}
+                    isDragOverTop={dragOverIndex === originalIndex && dragOverHalf === "top"}
+                    isDragOverBottom={dragOverIndex === originalIndex && dragOverHalf === "bottom"}
                     isDragging={dragIndex === originalIndex}
                   />
                 ))}
@@ -1502,6 +1701,7 @@ export default function App() {
                     onReorder={reorderRank}
                     onMoveToTop={moveToTop}
                     onMoveToBottom={moveToBottom}
+                    animatingId={animatingId}
                     dragHandlers={{
                       draggable: true,
                       onDragStart: handleDragStart(originalIndex),
@@ -1509,7 +1709,8 @@ export default function App() {
                       onDragEnd: handleDragEnd,
                       onDrop: handleDrop(originalIndex),
                     }}
-                    isDragOver={dragOverIndex === originalIndex}
+                    isDragOverTop={dragOverIndex === originalIndex && dragOverHalf === "top"}
+                    isDragOverBottom={dragOverIndex === originalIndex && dragOverHalf === "bottom"}
                     isDragging={dragIndex === originalIndex}
                   />
                 ))}
